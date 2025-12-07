@@ -29,7 +29,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define MODE_BUTTON 9
 
 // WiFi AP Configuration
-const char* ssid = "ESP32-Hidden";
+const char* ssid = "Mm_wifi";
 const char* password = "12345678";
 
 // Web Server
@@ -241,7 +241,7 @@ void handleData() {
     String body = server.arg("plain");
     Serial.println("Recibido en /data: " + body);
 
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
@@ -250,10 +250,10 @@ void handleData() {
     }
 
     // Auto-detect data type
-    if (doc.containsKey("operation") || doc.containsKey("result")) {
+    if (!doc["operation"].isNull() || !doc["result"].isNull()) {
       // Calculator data
       processCalculatorData(doc);
-    } else if (doc.containsKey("card")) {
+    } else if (!doc["card"].isNull()) {
       // Card data
       processCardData(doc);
     } else {
@@ -272,7 +272,7 @@ void handleCalculator() {
     String body = server.arg("plain");
     Serial.println("Recibido en /calc: " + body);
 
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
@@ -292,7 +292,7 @@ void handleCard() {
     String body = server.arg("plain");
     Serial.println("Recibido en /card: " + body);
 
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
@@ -310,15 +310,15 @@ void handleCard() {
 void processCalculatorData(JsonDocument& doc) {
   String operation = "";
 
-  if (doc.containsKey("operation")) {
+  if (!doc["operation"].isNull()) {
     operation = doc["operation"].as<String>();
-  } else if (doc.containsKey("num1") && doc.containsKey("num2") && doc.containsKey("operator")) {
+  } else if (!doc["num1"].isNull() && !doc["num2"].isNull() && !doc["operator"].isNull()) {
     // Build operation string from components
     operation = String(doc["num1"].as<String>()) + " " +
                 doc["operator"].as<String>() + " " +
                 doc["num2"].as<String>();
 
-    if (doc.containsKey("result")) {
+    if (!doc["result"].isNull()) {
       operation += " = " + doc["result"].as<String>();
     }
   }
