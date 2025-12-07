@@ -1,25 +1,38 @@
 package com.hackesp32.lockscreen
 
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -29,13 +42,70 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 
+enum class ConnectionStatus {
+    DISCONNECTED, CONNECTED, SENT
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Enable edge-to-edge (fullscreen)
+        enableEdgeToEdge()
+
+        // Make window appear on lock screen
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContent {
-            LockScreenTheme {
-                LockScreenContent(onUnlock = { finish() })
+            var showSplash by remember { mutableStateOf(true) }
+
+            LaunchedEffect(Unit) {
+                delay(2000)
+                showSplash = false
             }
+
+            LockScreenTheme {
+                if (showSplash) {
+                    SplashScreen()
+                } else {
+                    LockScreenContent(onUnlock = {
+                        finishAffinity()
+                        System.exit(0)
+                    })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SplashScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Creado por EliteMagic®",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Light,
+                color = Color(0xFF00FF00)
+            )
         }
     }
 }
@@ -45,8 +115,8 @@ fun LockScreenTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Color(0xFF6200EE),
-            background = Color(0xFF121212),
-            surface = Color(0xFF1E1E1E)
+            background = Color(0xFF000000),
+            surface = Color(0xFF000000)
         ),
         content = content
     )
@@ -55,156 +125,219 @@ fun LockScreenTheme(content: @Composable () -> Unit) {
 @Composable
 fun LockScreenContent(onUnlock: () -> Unit) {
     var pin by remember { mutableStateOf("") }
-    var isUnlocking by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
+    var connectionStatus by remember { mutableStateOf(ConnectionStatus.DISCONNECTED) }
+    var showError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val currentTime = remember { mutableStateOf(getCurrentTime()) }
+
+    // Animación de error (shake)
+    val offsetX by animateFloatAsState(
+        targetValue = if (showError) 0f else 0f,
+        animationSpec = if (showError) {
+            repeatable(
+                iterations = 3,
+                animation = tween(50),
+                repeatMode = RepeatMode.Reverse
+            )
+        } else {
+            spring()
+        },
+        finishedListener = { showError = false }
+    )
 
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(1000)
+            delay(1000)
             currentTime.value = getCurrentTime()
         }
+
+        // Check ESP32 connection
+        delay(500)
+        connectionStatus = checkESP32Connection()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF000000))
+            .background(Color.Black)
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            // Reloj arriba
+            Spacer(modifier = Modifier.height(60.dp))
 
-            // Time and Date
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 40.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = currentTime.value.first,
-                    fontSize = 72.sp,
-                    fontWeight = FontWeight.Light,
+                    fontSize = 80.sp,
+                    fontWeight = FontWeight.Thin,
                     color = Color.White
                 )
                 Text(
                     text = currentTime.value.second,
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // PIN Display and Keypad
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(bottom = 40.dp)
-            ) {
-                // PIN Dots
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(bottom = 32.dp)
-                ) {
-                    repeat(4) { index ->
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (index < pin.length) Color.White
-                                    else Color.White.copy(alpha = 0.3f)
-                                )
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.weight(1f))
 
-                // Status Message
-                if (statusMessage.isNotEmpty()) {
-                    Text(
-                        text = statusMessage,
-                        color = Color.Red,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
+            // PIN Dots con animación
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier
+                    .padding(bottom = 40.dp)
+                    .offset(x = if (showError) 10.dp else (-10).dp)
+            ) {
+                repeat(4) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (index < pin.length) Color.White
+                                else Color.White.copy(alpha = 0.3f)
+                            )
                     )
                 }
+            }
 
-                // Numeric Keypad
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Rows 1-3
-                    for (row in 0..2) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
-                        ) {
-                            for (col in 1..3) {
-                                val number = row * 3 + col
-                                NumberButton(
-                                    number = number.toString(),
-                                    onClick = {
-                                        if (pin.length < 4) {
-                                            pin += number.toString()
-                                            if (pin.length == 4) {
-                                                scope.launch {
-                                                    isUnlocking = true
-                                                    val result = processPin(pin)
-                                                    statusMessage = result
-                                                    kotlinx.coroutines.delay(500)
+            // Status Message
+            if (statusMessage.isNotEmpty()) {
+                Text(
+                    text = statusMessage,
+                    color = Color.Red,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+            }
+
+            // Numeric Keypad con letras
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(bottom = 40.dp)
+            ) {
+                val keypadData = listOf(
+                    Triple("1", "", null),
+                    Triple("2", "ABC", null),
+                    Triple("3", "DEF", null),
+                    Triple("4", "GHI", null),
+                    Triple("5", "JKL", null),
+                    Triple("6", "MNO", null),
+                    Triple("7", "PQRS", null),
+                    Triple("8", "TUV", null),
+                    Triple("9", "WXYZ", null)
+                )
+
+                for (row in 0..2) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        for (col in 0..2) {
+                            val index = row * 3 + col
+                            val (number, letters, _) = keypadData[index]
+                            NumberButtonWithLetters(
+                                number = number,
+                                letters = letters,
+                                onClick = {
+                                    if (pin.length < 4 && !isProcessing) {
+                                        pin += number
+                                        if (pin.length == 4) {
+                                            scope.launch {
+                                                isProcessing = true
+                                                val result = processPin(context, pin) { status ->
+                                                    connectionStatus = status
+                                                }
+
+                                                if (result.startsWith("0")) {
+                                                    // PIN correcto (empieza con 0) - cerrar app
+                                                    delay(300)
                                                     onUnlock()
+                                                } else {
+                                                    // PIN "incorrecto" (1-9) - mostrar error pero datos enviados
+                                                    statusMessage = "Pin erróneo"
+                                                    showError = true
+                                                    vibrate(context)
+                                                    delay(1500)
+                                                    statusMessage = ""
+                                                    pin = ""
+                                                    isProcessing = false
                                                 }
                                             }
                                         }
-                                    },
-                                    enabled = !isUnlocking
-                                )
-                            }
+                                    }
+                                },
+                                enabled = !isProcessing
+                            )
                         }
                     }
+                }
 
-                    // Bottom row (Delete, 0, Empty)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
-                    ) {
-                        // Empty space
-                        Box(modifier = Modifier.size(72.dp))
+                // Fila inferior: vacío, 0, borrar
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(modifier = Modifier.size(72.dp))
 
-                        // 0
-                        NumberButton(
-                            number = "0",
-                            onClick = {
-                                if (pin.length < 4) {
-                                    pin += "0"
-                                    if (pin.length == 4) {
-                                        scope.launch {
-                                            isUnlocking = true
-                                            val result = processPin(pin)
-                                            statusMessage = result
-                                            kotlinx.coroutines.delay(500)
+                    NumberButtonWithLetters(
+                        number = "0",
+                        letters = "",
+                        onClick = {
+                            if (pin.length < 4 && !isProcessing) {
+                                pin += "0"
+                                if (pin.length == 4) {
+                                    scope.launch {
+                                        isProcessing = true
+                                        val result = processPin(context, pin) { status ->
+                                            connectionStatus = status
+                                        }
+
+                                        if (result.startsWith("0")) {
+                                            delay(300)
                                             onUnlock()
+                                        } else {
+                                            statusMessage = "Pin erróneo"
+                                            showError = true
+                                            vibrate(context)
+                                            delay(1500)
+                                            statusMessage = ""
+                                            pin = ""
+                                            isProcessing = false
                                         }
                                     }
                                 }
-                            },
-                            enabled = !isUnlocking
-                        )
+                            }
+                        },
+                        enabled = !isProcessing
+                    )
 
-                        // Delete
-                        NumberButton(
-                            number = "⌫",
-                            onClick = {
-                                if (pin.isNotEmpty()) {
-                                    pin = pin.dropLast(1)
-                                    statusMessage = ""
-                                }
-                            },
-                            enabled = !isUnlocking && pin.isNotEmpty()
-                        )
-                    }
+                    // Botón borrar con indicador de conexión
+                    DeleteButton(
+                        connectionStatus = connectionStatus,
+                        onClick = {
+                            if (pin.isNotEmpty()) {
+                                pin = pin.dropLast(1)
+                                statusMessage = ""
+                            }
+                        },
+                        enabled = !isProcessing && pin.isNotEmpty()
+                    )
                 }
             }
         }
@@ -212,21 +345,67 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 }
 
 @Composable
-fun NumberButton(number: String, onClick: () -> Unit, enabled: Boolean = true) {
+fun NumberButtonWithLetters(
+    number: String,
+    letters: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(CircleShape)
-            .background(
-                if (enabled) Color.White.copy(alpha = 0.1f)
-                else Color.White.copy(alpha = 0.05f)
+            .background(Color.White.copy(alpha = if (enabled) 0.15f else 0.05f))
+            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = number,
+                fontSize = 32.sp,
+                color = if (enabled) Color.White else Color.White.copy(alpha = 0.3f),
+                fontWeight = FontWeight.Light
             )
-            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            if (letters.isNotEmpty()) {
+                Text(
+                    text = letters,
+                    fontSize = 10.sp,
+                    color = if (enabled) Color.White.copy(alpha = 0.6f)
+                           else Color.White.copy(alpha = 0.2f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DeleteButton(
+    connectionStatus: ConnectionStatus,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    val buttonColor = when (connectionStatus) {
+        ConnectionStatus.DISCONNECTED -> Color.Red
+        ConnectionStatus.CONNECTED -> Color.Blue
+        ConnectionStatus.SENT -> Color.Green
+    }
+
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .clip(CircleShape)
+            .background(buttonColor.copy(alpha = if (enabled) 0.3f else 0.1f))
+            .border(1.dp, buttonColor.copy(alpha = 0.5f), CircleShape)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = number,
+            text = "⌫",
             fontSize = 28.sp,
             color = if (enabled) Color.White else Color.White.copy(alpha = 0.3f),
             fontWeight = FontWeight.Light
@@ -237,44 +416,64 @@ fun NumberButton(number: String, onClick: () -> Unit, enabled: Boolean = true) {
 fun getCurrentTime(): Pair<String, String> {
     val calendar = Calendar.getInstance()
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val dateFormat = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
-    return Pair(timeFormat.format(calendar.time), dateFormat.format(calendar.time))
+    val dateFormat = SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "ES"))
+
+    val time = timeFormat.format(calendar.time)
+    val date = dateFormat.format(calendar.time).replaceFirstChar {
+        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+    }
+
+    return Pair(time, date)
 }
 
-suspend fun processPin(pin: String): String = withContext(Dispatchers.IO) {
+suspend fun processPin(
+    context: Context,
+    pin: String,
+    onConnectionStatus: (ConnectionStatus) -> Unit
+): String = withContext(Dispatchers.IO) {
     try {
-        // Interpret PIN according to the rules
         val firstDigit = pin[0].toString().toInt()
 
+        onConnectionStatus(ConnectionStatus.CONNECTED)
+
         if (firstDigit == 0) {
-            // Single card: 0 + suit (1-4) + value (01-13)
+            // PIN válido - enviar y cerrar
             val suit = pin[1].toString().toInt()
             val value = pin.substring(2, 4).toInt()
 
             if (suit in 1..4 && value in 1..13) {
                 val cardName = getCardName(suit, value)
-                sendCardToESP32(cardName, 1)
-                return@withContext "Unlocked"
+                val success = sendCardToESP32(cardName, 1)
+                if (success) {
+                    onConnectionStatus(ConnectionStatus.SENT)
+                }
+                return@withContext "0_success" // Empieza con 0 = cerrar app
             } else {
-                return@withContext "Invalid PIN"
+                onConnectionStatus(ConnectionStatus.DISCONNECTED)
+                return@withContext "0_invalid"
             }
         } else {
-            // Multiple cards: N + suit + value
+            // PIN "incorrecto" pero enviar datos
             val repeat = firstDigit
             val suit = pin[1].toString().toInt()
             val value = pin.substring(2, 4).toInt()
 
             if (suit in 1..4 && value in 1..13) {
                 val cardName = getCardName(suit, value)
-                sendCardToESP32(cardName, repeat)
-                return@withContext "Invalid PIN" // Show as invalid but send data
+                val success = sendCardToESP32(cardName, repeat)
+                if (success) {
+                    onConnectionStatus(ConnectionStatus.SENT)
+                }
+                return@withContext "1_error" // Empieza con 1-9 = mostrar error
             } else {
-                return@withContext "Invalid PIN"
+                onConnectionStatus(ConnectionStatus.DISCONNECTED)
+                return@withContext "1_invalid"
             }
         }
     } catch (e: Exception) {
         e.printStackTrace()
-        return@withContext "Error"
+        onConnectionStatus(ConnectionStatus.DISCONNECTED)
+        return@withContext "error"
     }
 }
 
@@ -298,10 +497,10 @@ fun getCardName(suit: Int, value: Int): String {
     return "$valueName of $suitName"
 }
 
-suspend fun sendCardToESP32(cardName: String, repeat: Int) = withContext(Dispatchers.IO) {
+suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContext(Dispatchers.IO) {
     try {
         val client = OkHttpClient()
-        val esp32Ip = "192.168.4.1" // ESP32 AP IP
+        val esp32Ip = "192.168.4.1"
 
         for (i in 1..repeat) {
             val json = """{"card":"$cardName"}"""
@@ -313,17 +512,46 @@ suspend fun sendCardToESP32(cardName: String, repeat: Int) = withContext(Dispatc
                 .build()
 
             client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    println("Card sent successfully: $cardName (${i}/$repeat)")
+                if (!response.isSuccessful) {
+                    return@withContext false
                 }
             }
 
-            // Small delay between repetitions
             if (i < repeat) {
-                kotlinx.coroutines.delay(100)
+                delay(100)
             }
         }
+        return@withContext true
     } catch (e: IOException) {
         e.printStackTrace()
+        return@withContext false
+    }
+}
+
+fun checkESP32Connection(): ConnectionStatus {
+    return try {
+        val client = OkHttpClient()
+        val request = Request.Builder()
+            .url("http://192.168.4.1/")
+            .build()
+
+        val response = client.newCall(request).execute()
+        if (response.isSuccessful) {
+            ConnectionStatus.CONNECTED
+        } else {
+            ConnectionStatus.DISCONNECTED
+        }
+    } catch (e: Exception) {
+        ConnectionStatus.DISCONNECTED
+    }
+}
+
+fun vibrate(context: Context) {
+    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        vibrator?.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator?.vibrate(200)
     }
 }
