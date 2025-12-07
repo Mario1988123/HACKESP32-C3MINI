@@ -1,0 +1,41 @@
+# Android
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+android/.DS_Store
+android/captures/
+android/*.iml
+android/*.apk
+android/*.ap_
+android/*.aab
+
+# Gradle
+android/.gradle
+android/gradle/
+!android/gradle/wrapper/gradle-wrapper.properties
+
+# Android Studio
+android/.idea/
+android/*.iml
+android/.externalNativeBuild
+android/.cxx/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# ESP32/Arduino
+esp32/**/*.bin
+esp32/**/*.elf
+esp32/**/*.hex
+esp32/**/.build/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
