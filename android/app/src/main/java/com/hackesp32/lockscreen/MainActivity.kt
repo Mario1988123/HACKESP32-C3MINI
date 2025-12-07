@@ -626,7 +626,11 @@ fun getCardName(suit: Int, value: Int): String {
 
 suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContext(Dispatchers.IO) {
     try {
-        val client = OkHttpClient()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
         val esp32Ip = "192.168.4.1"
 
         for (i in 1..repeat) {
@@ -638,10 +642,17 @@ suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContex
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return@withContext false
+            try {
+                client.newCall(request).execute().use { response ->
+                    android.util.Log.d("ESP32", "Response code: ${response.code}")
+                    if (!response.isSuccessful) {
+                        android.util.Log.e("ESP32", "Failed to send card: ${response.message}")
+                        return@withContext false
+                    }
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("ESP32", "Error sending card: ${e.message}", e)
+                return@withContext false
             }
 
             if (i < repeat) {
@@ -650,6 +661,7 @@ suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContex
         }
         return@withContext true
     } catch (e: IOException) {
+        android.util.Log.e("ESP32", "IOException: ${e.message}", e)
         e.printStackTrace()
         return@withContext false
     }
@@ -657,18 +669,23 @@ suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContex
 
 fun checkESP32Connection(): ConnectionStatus {
     return try {
-        val client = OkHttpClient()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
         val request = Request.Builder()
             .url("http://192.168.4.1/")
             .build()
 
         val response = client.newCall(request).execute()
+        android.util.Log.d("ESP32", "Connection check: ${response.code}")
         if (response.isSuccessful) {
             ConnectionStatus.CONNECTED
         } else {
             ConnectionStatus.DISCONNECTED
         }
     } catch (e: Exception) {
+        android.util.Log.e("ESP32", "Connection check failed: ${e.message}", e)
         ConnectionStatus.DISCONNECTED
     }
 }
