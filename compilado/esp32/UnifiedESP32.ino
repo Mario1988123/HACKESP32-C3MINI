@@ -2,17 +2,19 @@
  * ESP32-C3 Unified System
  * Supports both WiFi Calculator and Lock Screen Card modes
  *
- * Mode switching:
- * - Press BOOT button (GPIO9) to toggle between modes
- * - Automatically detects data type (calculator operation or card)
+ * Compatible with:
+ * 1. Calculadora WiFi App (uses /startTransmission endpoint)
+ * 2. Lock Screen App (uses /card endpoint)
  *
- * Modes:
- * 1. CALCULATOR MODE: Receives math operations (e.g., "5+3=8")
- * 2. LOCKSCREEN MODE: Receives playing cards (e.g., "Ace of Hearts")
+ * Features:
+ * - DNS Server for magic.mazo domain
+ * - Multiple endpoints for compatibility
+ * - OLED display support
  */
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include <ArduinoJson.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -31,9 +33,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // WiFi AP Configuration
 const char* ssid = "Mm_wifi";
 const char* password = "12345678";
+const char* DOMINIO = "magic.mazo";
 
-// Web Server
+// Web Server and DNS Server
 WebServer server(80);
+DNSServer dnsServer;
 
 // Operating modes
 enum Mode {
@@ -81,21 +85,43 @@ void setup() {
 
   displayWiFiInfo(IP);
 
+  // Start DNS Server
+  dnsServer.start(53, DOMINIO, WiFi.softAPIP());
+  Serial.println("Servidor DNS iniciado para: " + String(DOMINIO));
+
   // Configure server endpoints
   server.on("/", HTTP_GET, handleRoot);
   server.on("/calc", HTTP_POST, handleCalculator);
   server.on("/card", HTTP_POST, handleCard);
   server.on("/data", HTTP_POST, handleData); // Universal endpoint
+  server.on("/startTransmission", HTTP_GET, handleStartTransmission); // Calculadora WiFi
+  server.on("/stopTransmission", HTTP_GET, handleStopTransmission);
   server.on("/mode", HTTP_GET, handleModeGet);
   server.on("/mode", HTTP_POST, handleModeSet);
+  server.onNotFound(handleRoot); // Redirect all to root
 
   server.begin();
   Serial.println("Servidor HTTP iniciado");
+
+  Serial.println("==========================================");
+  Serial.println("🎴 ESP32 UNIFICADO - ACTIVO 🎴");
+  Serial.println("==========================================");
+  Serial.println("📱 WiFi: " + String(ssid));
+  Serial.println("🔑 Pass: " + String(password));
+  Serial.println("🌐 Acceso:");
+  Serial.println("   → http://magic.mazo");
+  Serial.println("   → http://192.168.4.1");
+  Serial.println("📡 Endpoints disponibles:");
+  Serial.println("   → /card (Lock Screen App)");
+  Serial.println("   → /calc (Calculator)");
+  Serial.println("   → /startTransmission (Calculadora WiFi)");
+  Serial.println("==========================================");
 
   displayModeScreen();
 }
 
 void loop() {
+  dnsServer.processNextRequest();
   server.handleClient();
   checkModeButton();
 }
@@ -233,6 +259,67 @@ void handleModeSet() {
   } else {
     server.send(400, "text/plain", "Missing mode parameter");
   }
+}
+
+// Endpoint para Calculadora WiFi - recibe cartas desde la app web
+void handleStartTransmission() {
+  Serial.println("=== /startTransmission LLAMADO ===");
+
+  if (!server.hasArg("cards")) {
+    Serial.println("ERROR: No se recibió parámetro 'cards'");
+    server.send(400, "text/plain", "No cards parameter");
+    return;
+  }
+
+  String cardsParam = server.arg("cards");
+  int count = 1;
+
+  if (server.hasArg("count")) {
+    count = server.arg("count").toInt();
+  }
+
+  Serial.println("Cartas recibidas: " + cardsParam);
+  Serial.println("Cantidad: " + String(count));
+
+  // Procesar las cartas separadas por '|'
+  if (count == 1) {
+    // Una sola carta
+    displayCard(cardsParam);
+    Serial.println("Mostrando carta única: " + cardsParam);
+  } else {
+    // Múltiples cartas
+    String cards[10];
+    int cardIndex = 0;
+    int startIndex = 0;
+
+    for (int i = 0; i <= cardsParam.length() && cardIndex < count; i++) {
+      if (i == cardsParam.length() || cardsParam.charAt(i) == '|') {
+        String card = cardsParam.substring(startIndex, i);
+        card.trim();
+        if (card.length() > 0) {
+          cards[cardIndex] = card;
+          cardIndex++;
+        }
+        startIndex = i + 1;
+      }
+    }
+
+    // Mostrar primera carta
+    if (cardIndex > 0) {
+      String displayText = "Recibidas " + String(cardIndex) + " cartas:\n" + cards[0];
+      if (cardIndex > 1) displayText += "\n" + cards[1];
+      displayCard(displayText);
+      Serial.println("Mostrando " + String(cardIndex) + " cartas");
+    }
+  }
+
+  server.send(200, "text/plain", "OK - Recibido: " + cardsParam);
+}
+
+void handleStopTransmission() {
+  Serial.println("=== /stopTransmission LLAMADO ===");
+  displayModeScreen();
+  server.send(200, "text/plain", "OK - Transmisión detenida");
 }
 
 void handleData() {
