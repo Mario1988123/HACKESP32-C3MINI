@@ -290,9 +290,8 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 
                 for (row in 0..2) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         for (col in 0..2) {
                             val index = row * 3 + col
@@ -355,9 +354,8 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 
                 // Fila inferior: vacío, 0, borrar
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(modifier = Modifier.size(72.dp))
 
