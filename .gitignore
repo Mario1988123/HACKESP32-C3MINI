@@ -14,7 +14,9 @@ android/*.aab
 # Gradle
 android/.gradle
 android/gradle/
+!android/gradle/wrapper/
 !android/gradle/wrapper/gradle-wrapper.properties
+!android/gradle/wrapper/gradle-wrapper.jar
 
 # Android Studio
 android/.idea/

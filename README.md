@@ -6,6 +6,26 @@ Sistema de comunicación encubierta que utiliza una aplicación Android de panta
 
 Este proyecto simula una pantalla de bloqueo normal de Android, pero en realidad envía información de cartas de póker al ESP32 mediante códigos PIN. El sistema está diseñado para parecer completamente legítimo mientras transmite datos de manera discreta.
 
+## 🔄 Código ESP32 Unificado Disponible
+
+**¡NUEVO!** Ahora incluye **UnifiedESP32.ino** - un código ESP32 que combina:
+- 🔢 **Calculadora WiFi** - Recibe operaciones matemáticas
+- 🃏 **Pantalla de Bloqueo** - Recibe cartas de póker
+
+**Características:**
+- ✅ Cambio de modo sin reprogramar (botón físico, web o API)
+- ✅ Detección automática del tipo de datos
+- ✅ Un solo WiFi AP para ambas apps
+- ✅ Interfaz web de control
+
+📖 **Ver documentación completa:** [ESP32_UNIFIED.md](ESP32_UNIFIED.md)
+
+## 🤖 Compilación Automática
+
+Este proyecto usa **GitHub Actions** para compilar automáticamente el APK de Android.
+
+📦 **Descargar APK:** Ve a la pestaña [Actions](../../actions) → Selecciona el último workflow → Descarga los artefactos `app-debug` o `app-release`
+
 ## 🎯 Funcionamiento
 
 ### Sistema de Codificación de PIN
