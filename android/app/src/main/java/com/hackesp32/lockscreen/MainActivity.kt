@@ -1,36 +1,40 @@
 package com.hackesp32.lockscreen
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,14 +50,14 @@ enum class ConnectionStatus {
     DISCONNECTED, CONNECTED, SENT
 }
 
+data class CardData(val name: String, val count: Int = 1)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Enable edge-to-edge (fullscreen)
         enableEdgeToEdge()
 
-        // Make window appear on lock screen
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -129,9 +133,26 @@ fun LockScreenContent(onUnlock: () -> Unit) {
     var statusMessage by remember { mutableStateOf("") }
     var connectionStatus by remember { mutableStateOf(ConnectionStatus.DISCONNECTED) }
     var showError by remember { mutableStateOf(false) }
+
+    // Estado para acumular cartas
+    var pendingCards by remember { mutableStateOf<List<CardData>>(emptyList()) }
+    var expectedCardCount by remember { mutableStateOf(0) }
+
+    // Menu oculto y foto de fondo
+    var showPhotoMenu by remember { mutableStateOf(false) }
+    var backgroundImageUri by remember { mutableStateOf<Uri?>(null) }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentTime = remember { mutableStateOf(getCurrentTime()) }
+
+    // Launcher para seleccionar foto
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        backgroundImageUri = uri
+        showPhotoMenu = false
+    }
 
     // Animación de error (shake)
     val offsetX by animateFloatAsState(
@@ -153,8 +174,9 @@ fun LockScreenContent(onUnlock: () -> Unit) {
             delay(1000)
             currentTime.value = getCurrentTime()
         }
+    }
 
-        // Check ESP32 connection
+    LaunchedEffect(Unit) {
         delay(500)
         connectionStatus = checkESP32Connection()
     }
@@ -163,20 +185,45 @@ fun LockScreenContent(onUnlock: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
+        // Imagen de fondo desenfocada
+        if (backgroundImageUri != null) {
+            Image(
+                painter = rememberAsyncImagePainter(backgroundImageUri),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(20.dp),
+                contentScale = ContentScale.Crop
+            )
+            // Overlay oscuro
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Reloj arriba
             Spacer(modifier = Modifier.height(60.dp))
 
+            // Reloj con long press para menú
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            showPhotoMenu = true
+                        }
+                    )
+                }
             ) {
                 Text(
                     text = currentTime.value.first,
@@ -259,23 +306,42 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                                         if (pin.length == 4) {
                                             scope.launch {
                                                 isProcessing = true
-                                                val result = processPin(context, pin) { status ->
-                                                    connectionStatus = status
-                                                }
+                                                val result = processPin(
+                                                    context = context,
+                                                    pin = pin,
+                                                    pendingCards = pendingCards,
+                                                    expectedCount = expectedCardCount,
+                                                    onConnectionStatus = { connectionStatus = it },
+                                                    onCardsUpdated = { cards, count ->
+                                                        pendingCards = cards
+                                                        expectedCardCount = count
+                                                    }
+                                                )
 
-                                                if (result.startsWith("0")) {
-                                                    // PIN correcto (empieza con 0) - cerrar app
-                                                    delay(300)
-                                                    onUnlock()
-                                                } else {
-                                                    // PIN "incorrecto" (1-9) - mostrar error pero datos enviados
-                                                    statusMessage = "Pin erróneo"
-                                                    showError = true
-                                                    vibrate(context)
-                                                    delay(1500)
-                                                    statusMessage = ""
-                                                    pin = ""
-                                                    isProcessing = false
+                                                when {
+                                                    result.startsWith("close") -> {
+                                                        // Enviar y cerrar
+                                                        delay(300)
+                                                        onUnlock()
+                                                    }
+                                                    result.startsWith("continue") -> {
+                                                        // Guardar carta y continuar
+                                                        statusMessage = "Pin erróneo"
+                                                        showError = true
+                                                        vibrate(context)
+                                                        delay(1500)
+                                                        statusMessage = ""
+                                                        pin = ""
+                                                        isProcessing = false
+                                                    }
+                                                    else -> {
+                                                        // Error
+                                                        statusMessage = "Error"
+                                                        delay(1500)
+                                                        statusMessage = ""
+                                                        pin = ""
+                                                        isProcessing = false
+                                                    }
                                                 }
                                             }
                                         }
@@ -304,21 +370,39 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                                 if (pin.length == 4) {
                                     scope.launch {
                                         isProcessing = true
-                                        val result = processPin(context, pin) { status ->
-                                            connectionStatus = status
-                                        }
+                                        val result = processPin(
+                                            context = context,
+                                            pin = pin,
+                                            pendingCards = pendingCards,
+                                            expectedCount = expectedCardCount,
+                                            onConnectionStatus = { connectionStatus = it },
+                                            onCardsUpdated = { cards, count ->
+                                                pendingCards = cards
+                                                expectedCardCount = count
+                                            }
+                                        )
 
-                                        if (result.startsWith("0")) {
-                                            delay(300)
-                                            onUnlock()
-                                        } else {
-                                            statusMessage = "Pin erróneo"
-                                            showError = true
-                                            vibrate(context)
-                                            delay(1500)
-                                            statusMessage = ""
-                                            pin = ""
-                                            isProcessing = false
+                                        when {
+                                            result.startsWith("close") -> {
+                                                delay(300)
+                                                onUnlock()
+                                            }
+                                            result.startsWith("continue") -> {
+                                                statusMessage = "Pin erróneo"
+                                                showError = true
+                                                vibrate(context)
+                                                delay(1500)
+                                                statusMessage = ""
+                                                pin = ""
+                                                isProcessing = false
+                                            }
+                                            else -> {
+                                                statusMessage = "Error"
+                                                delay(1500)
+                                                statusMessage = ""
+                                                pin = ""
+                                                isProcessing = false
+                                            }
                                         }
                                     }
                                 }
@@ -338,6 +422,41 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                         },
                         enabled = !isProcessing && pin.isNotEmpty()
                     )
+                }
+            }
+        }
+
+        // Menú oculto para foto
+        if (showPhotoMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f))
+                    .clickable { showPhotoMenu = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(onClick = {
+                        photoPickerLauncher.launch("image/*")
+                    }) {
+                        Text("Cambiar foto de fondo")
+                    }
+
+                    if (backgroundImageUri != null) {
+                        Button(onClick = {
+                            backgroundImageUri = null
+                            showPhotoMenu = false
+                        }) {
+                            Text("Eliminar foto")
+                        }
+                    }
+
+                    Button(onClick = { showPhotoMenu = false }) {
+                        Text("Cancelar")
+                    }
                 }
             }
         }
@@ -429,51 +548,61 @@ fun getCurrentTime(): Pair<String, String> {
 suspend fun processPin(
     context: Context,
     pin: String,
-    onConnectionStatus: (ConnectionStatus) -> Unit
+    pendingCards: List<CardData>,
+    expectedCount: Int,
+    onConnectionStatus: (ConnectionStatus) -> Unit,
+    onCardsUpdated: (List<CardData>, Int) -> Unit
 ): String = withContext(Dispatchers.IO) {
     try {
         val firstDigit = pin[0].toString().toInt()
+        val suit = pin[1].toString().toInt()
+        val value = pin.substring(2, 4).toInt()
 
+        if (suit !in 1..4 || value !in 1..13) {
+            return@withContext "error_invalid"
+        }
+
+        val cardName = getCardName(suit, value)
         onConnectionStatus(ConnectionStatus.CONNECTED)
 
-        if (firstDigit == 0) {
-            // PIN válido - enviar y cerrar
-            val suit = pin[1].toString().toInt()
-            val value = pin.substring(2, 4).toInt()
-
-            if (suit in 1..4 && value in 1..13) {
-                val cardName = getCardName(suit, value)
+        // Si es el primer PIN de la secuencia (no hay cartas pendientes)
+        if (pendingCards.isEmpty()) {
+            if (firstDigit == 0) {
+                // PIN que empieza con 0: enviar inmediatamente y cerrar
                 val success = sendCardToESP32(cardName, 1)
                 if (success) {
                     onConnectionStatus(ConnectionStatus.SENT)
                 }
-                return@withContext "0_success" // Empieza con 0 = cerrar app
+                return@withContext "close_now"
             } else {
-                onConnectionStatus(ConnectionStatus.DISCONNECTED)
-                return@withContext "0_invalid"
+                // PIN que empieza con 1-9: guardar carta y esperar más
+                val newCards = listOf(CardData(cardName, 1))
+                onCardsUpdated(newCards, firstDigit)
+                return@withContext "continue_waiting"
             }
         } else {
-            // PIN "incorrecto" pero enviar datos
-            val repeat = firstDigit
-            val suit = pin[1].toString().toInt()
-            val value = pin.substring(2, 4).toInt()
+            // Ya hay cartas pendientes, agregar esta nueva
+            val newCards = pendingCards + CardData(cardName, 1)
 
-            if (suit in 1..4 && value in 1..13) {
-                val cardName = getCardName(suit, value)
-                val success = sendCardToESP32(cardName, repeat)
-                if (success) {
-                    onConnectionStatus(ConnectionStatus.SENT)
+            if (newCards.size >= expectedCount) {
+                // Se completó el número esperado: enviar todas y cerrar
+                for (card in newCards) {
+                    sendCardToESP32(card.name, card.count)
                 }
-                return@withContext "1_error" // Empieza con 1-9 = mostrar error
+                onConnectionStatus(ConnectionStatus.SENT)
+                delay(200) // Para que se vea el verde
+                onCardsUpdated(emptyList(), 0) // Limpiar
+                return@withContext "close_complete"
             } else {
-                onConnectionStatus(ConnectionStatus.DISCONNECTED)
-                return@withContext "1_invalid"
+                // Aún faltan cartas
+                onCardsUpdated(newCards, expectedCount)
+                return@withContext "continue_waiting"
             }
         }
     } catch (e: Exception) {
         e.printStackTrace()
         onConnectionStatus(ConnectionStatus.DISCONNECTED)
-        return@withContext "error"
+        return@withContext "error_exception"
     }
 }
 
