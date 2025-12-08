@@ -34,16 +34,41 @@ String cartasSeleccionadas[10];
 char ssids[500][32];
 int totalRedesActivas = 0;
 
-// Caracteres invisibles para variaciones
+// Caracteres invisibles que funcionan bien con emojis en Android
 const char* invisibles[] = {
-  "\u200B", "\u2060", "\u200C", "\uFEFF", "\u200D",
-  "\u200B\u2060", "\u200C\uFEFF", "\u200D\u200B", "\u2060\u200C", "\uFEFF\u200D",
-  "\u200B\u200C", "\u200D\u2060", "\uFEFF\u200B", "\u200C\u200D", "\u2060\uFEFF",
-  "\u200B\u200D", "\u200C\u2060", "\u200D\uFEFF", "\u2060\u200B", "\uFEFF\u200C",
-  "\u200B\uFEFF", "\u200C\u200B", "\u200D\u200C", "\u2060\u200D", "\uFEFF\u2060",
-  "\u200B\u200C\u200D", "\u200D\u2060\uFEFF", "\u2060\uFEFF\u200B", "\uFEFF\u200B\u200C", "\u200B\u200D\u2060"
+  "",
+  "\u200B",
+  "\u200B\u200B",
+  "\u200C",
+  "\u200C\u200C",
+  "\u200D",
+  "\u200D\u200D",
+  "\u200B\u200C",
+  "\u200B\u200D",
+  "\u200C\u200B",
+  "\u200C\u200D",
+  "\u200D\u200B",
+  "\u200D\u200C",
+  "\u200B\u200B\u200B",
+  "\u200C\u200C\u200C",
+  "\u200D\u200D\u200D",
+  "\u200B\u200C\u200B",
+  "\u200B\u200D\u200B",
+  "\u200C\u200B\u200C",
+  "\u200C\u200D\u200C",
+  "\u200D\u200B\u200D",
+  "\u200D\u200C\u200D",
+  "\u200B\u200C\u200D",
+  "\u200B\u200D\u200C",
+  "\u200C\u200B\u200D",
+  "\u200C\u200D\u200B",
+  "\u200D\u200B\u200C",
+  "\u200D\u200C\u200B",
+  "\u200B\u200B\u200C",
+  "\u200B\u200B\u200D"
 };
 
+// =================== HTML ===================
 // =================== HTML ===================
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -51,116 +76,183 @@ const char index_html[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MOE HACK</title>
+<title>ESP32 Card Transmitter</title>
 <style>
+  * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    margin:0; padding:0; text-align:center; font-family:Arial, Helvetica, sans-serif; color:#222;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
   }
-  .wrap {
+  .container {
     background: rgba(255,255,255,0.95);
-    margin: 10px auto;
-    padding: 12px;
-    border-radius: 12px;
-    max-width: 980px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-width: 500px;
+    width: 100%;
+    padding: 30px;
+    animation: fadeIn 0.5s ease-in;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   h1 {
-    font-size: 6vw;
-    margin: 8px 0 6px;
-    letter-spacing: 2px;
-    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    text-align: center;
+    font-size: 32px;
+    margin-bottom: 10px;
+    background: linear-gradient(45deg, #667eea, #764ba2);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 30px;
   }
   .status {
-    padding: 8px;
-    margin: 8px 0;
-    border-radius: 6px;
-    font-weight: bold;
-    background: #f8f9fa;
-    border: 2px solid #dee2e6;
-    font-size: 3.5vw;
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 25px;
+    transition: all 0.3s ease;
   }
-  .status-active { background: #d4edda; color: #155724; border-color: #c3e6cb; }
-  .status-inactive { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-  .suits {
-    display:flex;
-    justify-content:space-around;
-    align-items:center;
-    margin: 8px auto;
-    max-width: 95%;
-    gap:8px;
+  .status.inactive {
+    background: #fee;
+    color: #c33;
+    border: 2px solid #fcc;
   }
-  .suits button {
-    flex:1;
-    font-size:12vw;
-    line-height:1;
-    aspect-ratio:1/1;
-    border:none;
-    border-radius:12px;
-    background:#fff;
-    cursor:pointer;
-    box-shadow:0 2px 8px rgba(0,0,0,.15);
-    transition: transform 0.2s, box-shadow 0.2s;
+  .status.active {
+    background: #efe;
+    color: #3c3;
+    border: 2px solid #cfc;
+    animation: pulse 2s infinite;
   }
-  .suits button:hover {
-    transform: translateY(-2px);
-    box-shadow:0 4px 12px rgba(0,0,0,.2);
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
   }
-  .suits button:active { transform: scale(.97); }
-  .spade   { color:black; border:3px solid black; }
-  .heart   { color:red;   border:3px solid red; }
-  .diamond { color:red;   border:3px solid red; }
-  .club    { color:black; border:3px solid black; }
-  .ranks {
-    display:flex;
-    flex-wrap:wrap;
-    justify-content:center;
-    gap:6px;
-    max-width: 96%;
-    margin: 10px auto;
-  }
-  .ranks button {
-    width:15vw;
-    max-width:70px;
-    height:15vw;
-    max-height:70px;
-    font-size:5vw;
-    border:2px solid #555;
-    border-radius:8px;
-    background:#eee;
-    cursor:pointer;
-    transition: background 0.2s;
-  }
-  .ranks button:active { background:#ddd; }
-  #ranksSection { display:none; }
-  .control-buttons {
+  .card-display {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 25px;
+    min-height: 60px;
     display: flex;
+    align-items: center;
     justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+  }
+  .suits {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
-    margin: 12px 0;
+    margin-bottom: 20px;
+  }
+  .suit-btn {
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 12px;
+    font-size: 48px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+  .suit-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+  }
+  .suit-btn:active {
+    transform: scale(0.95);
+  }
+  .suit-btn.spade { background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); }
+  .suit-btn.heart { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
+  .suit-btn.diamond { background: linear-gradient(135deg, #e67e22 0%, #d35400 100%); }
+  .suit-btn.club { background: linear-gradient(135deg, #16a085 0%, #117a65 100%); }
+  .ranks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .ranks.show {
+    max-height: 500px;
+  }
+  .rank-btn {
+    aspect-ratio: 1;
+    border: 2px solid #667eea;
+    background: white;
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #667eea;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .rank-btn:hover {
+    background: #667eea;
+    color: white;
+    transform: scale(1.05);
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 25px;
   }
   .ctrl-btn {
-    padding: 10px 20px;
+    padding: 15px;
     border: none;
-    border-radius: 8px;
-    color: white;
-    font-size: 4vw;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    transition: transform 0.2s;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
-  .ctrl-btn:active { transform: scale(0.95); }
-  .start-btn { background: #28a745; }
-  .stop-btn { background: #dc3545; }
-  @media (min-width: 640px) {
-    h1 { font-size: 38px; }
-    .suits button { font-size: 80px; }
-    .ranks button { font-size: 22px; width: 60px; height: 60px; }
-    .ctrl-btn { font-size: 18px; }
-    .status { font-size: 16px; }
+  .ctrl-btn.start {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  }
+  .ctrl-btn.start:hover {
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    transform: translateY(-2px);
+  }
+  .ctrl-btn.stop {
+    background: linear-gradient(135deg, #ee5a6f 0%, #f29263 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(238, 90, 111, 0.4);
+  }
+  .ctrl-btn.stop:hover {
+    box-shadow: 0 6px 20px rgba(238, 90, 111, 0.6);
+    transform: translateY(-2px);
+  }
+  .footer {
+    text-align: center;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+    color: #999;
+    font-size: 12px;
+  }
+  .footer strong {
+    color: #667eea;
   }
 </style>
 <script>
@@ -171,27 +263,32 @@ if (window.location.hostname === '192.168.4.1') {
   window.location.href = 'http://magic.mazo';
 }
 
-function chooseSuit(suit){
+function chooseSuit(suit, emoji){
   currentSuit = suit;
-  document.getElementById('ranksSection').style.display = 'flex';
+  selectedCard = '';
+  document.getElementById('rankSection').classList.add('show');
+  document.getElementById('cardDisplay').innerHTML = '¿Qué carta? ' + emoji;
 }
 
 function chooseRank(rank){
   selectedCard = rank + ' ' + currentSuit;
-  document.getElementById('selectedCard').innerHTML = 'Carta: <strong>' + selectedCard + '</strong>';
-  document.getElementById('ranksSection').style.display = 'none';
+  document.getElementById('cardDisplay').innerHTML = '<strong>✓ ' + selectedCard + '</strong>';
+  document.getElementById('rankSection').classList.remove('show');
 }
 
 function startTransmission(){
   if(!selectedCard){
-    alert('Selecciona una carta primero');
+    alert('⚠️ Selecciona una carta primero');
     return;
   }
   fetch('/startTransmission?cards=' + encodeURIComponent(selectedCard) + '&count=1')
     .then(response => response.text())
     .then(data => {
-      document.getElementById('status').innerHTML = '🟢 TRANSMITIENDO: ' + selectedCard + ' (30 redes)';
-      document.getElementById('status').className = 'status status-active';
+      document.getElementById('status').innerHTML = '📡 Transmitiendo: ' + selectedCard + ' (30 redes)';
+      document.getElementById('status').className = 'status active';
+    })
+    .catch(err => {
+      alert('❌ Error: ' + err.message);
     });
 }
 
@@ -199,35 +296,57 @@ function stopTransmission(){
   fetch('/stopTransmission')
     .then(response => response.text())
     .then(data => {
-      document.getElementById('status').innerHTML = '🔴 TRANSMISIÓN DETENIDA';
-      document.getElementById('status').className = 'status status-inactive';
+      document.getElementById('status').innerHTML = '⏸️ Transmisión detenida';
+      document.getElementById('status').className = 'status inactive';
+      document.getElementById('cardDisplay').innerHTML = 'Selecciona una carta';
     });
 }
 </script>
 </head>
 <body>
-  <div class="wrap">
-    <h1>MOE HACK</h1>
-    <div class="status status-inactive" id="status">🔴 INACTIVO - Selecciona carta y pulsa INICIAR</div>
-    <div id="selectedCard" style="padding: 10px; font-size: 18px;">Selecciona una carta</div>
+  <div class="container">
+    <h1>🎴 ESP32 TRANSMITTER</h1>
+    <div class="subtitle">Card Broadcasting System</div>
+
+    <div class="status inactive" id="status">
+      ⏸️ Inactivo - Selecciona una carta
+    </div>
+
+    <div class="card-display" id="cardDisplay">
+      Selecciona una carta
+    </div>
+
     <div class="suits">
-      <button class="spade"   onclick="chooseSuit('♠')">&spades;</button>
-      <button class="heart"   onclick="chooseSuit('♥')">&hearts;</button>
-      <button class="diamond" onclick="chooseSuit('♦')">&diams;</button>
-      <button class="club"    onclick="chooseSuit('♣')">&clubs;</button>
+      <button class="suit-btn spade" onclick="chooseSuit('♠','♠')">♠</button>
+      <button class="suit-btn heart" onclick="chooseSuit('♥','♥')">♥</button>
+      <button class="suit-btn diamond" onclick="chooseSuit('♦','♦')">♦</button>
+      <button class="suit-btn club" onclick="chooseSuit('♣','♣')">♣</button>
     </div>
-    <div id="ranksSection" class="ranks">
-      <button onclick="chooseRank('A')">A</button><button onclick="chooseRank('2')">2</button>
-      <button onclick="chooseRank('3')">3</button><button onclick="chooseRank('4')">4</button>
-      <button onclick="chooseRank('5')">5</button><button onclick="chooseRank('6')">6</button>
-      <button onclick="chooseRank('7')">7</button><button onclick="chooseRank('8')">8</button>
-      <button onclick="chooseRank('9')">9</button><button onclick="chooseRank('10')">10</button>
-      <button onclick="chooseRank('J')">J</button><button onclick="chooseRank('Q')">Q</button>
-      <button onclick="chooseRank('K')">K</button>
+
+    <div id="rankSection" class="ranks">
+      <button class="rank-btn" onclick="chooseRank('A')">A</button>
+      <button class="rank-btn" onclick="chooseRank('2')">2</button>
+      <button class="rank-btn" onclick="chooseRank('3')">3</button>
+      <button class="rank-btn" onclick="chooseRank('4')">4</button>
+      <button class="rank-btn" onclick="chooseRank('5')">5</button>
+      <button class="rank-btn" onclick="chooseRank('6')">6</button>
+      <button class="rank-btn" onclick="chooseRank('7')">7</button>
+      <button class="rank-btn" onclick="chooseRank('8')">8</button>
+      <button class="rank-btn" onclick="chooseRank('9')">9</button>
+      <button class="rank-btn" onclick="chooseRank('10')">10</button>
+      <button class="rank-btn" onclick="chooseRank('J')">J</button>
+      <button class="rank-btn" onclick="chooseRank('Q')">Q</button>
+      <button class="rank-btn" onclick="chooseRank('K')">K</button>
     </div>
-    <div class="control-buttons">
-      <button class="ctrl-btn start-btn" onclick="startTransmission()">▶ INICIAR</button>
-      <button class="ctrl-btn stop-btn" onclick="stopTransmission()">⏹ DETENER</button>
+
+    <div class="controls">
+      <button class="ctrl-btn start" onclick="startTransmission()">▶ Iniciar</button>
+      <button class="ctrl-btn stop" onclick="stopTransmission()">⏹ Detener</button>
+    </div>
+
+    <div class="footer">
+      Desarrollado por <strong>EliteMagic</strong><br>
+      ESP32-C3 • WiFi AP: Mm_wifi
     </div>
   </div>
 </body>

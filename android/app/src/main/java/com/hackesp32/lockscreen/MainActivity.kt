@@ -104,6 +104,13 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            Icon(
+                painter = painterResource(id = android.R.drawable.ic_dialog_alert),
+                contentDescription = null,
+                modifier = Modifier.size(120.dp),
+                tint = Color(0xFF00FF00)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Creado por EliteMagic®",
                 fontSize = 24.sp,
@@ -208,7 +215,6 @@ fun LockScreenContent(onUnlock: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding()
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -254,8 +260,11 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                             .size(14.dp)
                             .clip(CircleShape)
                             .background(
-                                if (index < pin.length) Color.White
-                                else Color.White.copy(alpha = 0.3f)
+                                when {
+                                    connectionStatus == ConnectionStatus.SENT && index < pin.length -> Color(0xFF00FF00) // Verde cuando se envía
+                                    index < pin.length -> Color.White
+                                    else -> Color.White.copy(alpha = 0.3f)
+                                }
                             )
                     )
                 }
@@ -328,7 +337,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                                                         statusMessage = "Pin erróneo"
                                                         showError = true
                                                         vibrate(context)
-                                                        delay(1500)
+                                                        delay(800)
                                                         statusMessage = ""
                                                         pin = ""
                                                         isProcessing = false
@@ -336,7 +345,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                                                     else -> {
                                                         // Error
                                                         statusMessage = "Error"
-                                                        delay(1500)
+                                                        delay(800)
                                                         statusMessage = ""
                                                         pin = ""
                                                         isProcessing = false
@@ -506,18 +515,15 @@ fun DeleteButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
-    val buttonColor = when (connectionStatus) {
-        ConnectionStatus.DISCONNECTED -> Color.Red
-        ConnectionStatus.CONNECTED -> Color.Blue
-        ConnectionStatus.SENT -> Color.Green
-    }
+    // Color uniforme igual que los demás botones
+    val buttonColor = Color.White.copy(alpha = if (enabled) 0.15f else 0.05f)
 
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(CircleShape)
-            .background(buttonColor.copy(alpha = if (enabled) 0.3f else 0.1f))
-            .border(1.dp, buttonColor.copy(alpha = 0.5f), CircleShape)
+            .background(buttonColor)
+            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
