@@ -261,6 +261,30 @@ void generarVariacionesCarta(const String& baseName) {
   Serial.println("Generadas 30 redes de: " + baseName);
 }
 
+void configurarMultiplesCartas(String cardsParam, int count) {
+  limpiarRedesAnteriores();
+  Serial.println("Procesando múltiples cartas: " + cardsParam);
+
+  int startIndex = 0;
+  int cardIndex = 0;
+
+  for(int i = 0; i <= cardsParam.length() && cardIndex < count; i++) {
+    if(i == cardsParam.length() || cardsParam.charAt(i) == '|') {
+      String card = cardsParam.substring(startIndex, i);
+      card.trim();
+
+      if(card.length() > 0) {
+        card.toCharArray(ssids[cardIndex], 32);
+        cartasSeleccionadas[cardIndex] = card;
+        cardIndex++;
+      }
+      startIndex = i + 1;
+    }
+  }
+  totalRedesActivas = cardIndex;
+  Serial.println("Total redes configuradas: " + String(cardIndex));
+}
+
 // =================== HTTP HANDLERS ===================
 void handleRoot() {
   server.send(200, "text/html", index_html);
@@ -276,9 +300,23 @@ void handleStartTransmission() {
   }
 
   String cardsParam = server.arg("cards");
-  Serial.println("Carta recibida: " + cardsParam);
+  int count = 1;
 
-  generarVariacionesCarta(cardsParam);
+  if (server.hasArg("count")) {
+    count = server.arg("count").toInt();
+  }
+
+  Serial.println("Cartas recibidas: " + cardsParam);
+  Serial.println("Cantidad: " + String(count));
+
+  if (count == 1) {
+    // Una sola carta: generar 30 variaciones
+    generarVariacionesCarta(cardsParam);
+  } else {
+    // Múltiples cartas: 1 red por cada carta
+    configurarMultiplesCartas(cardsParam, count);
+  }
+
   transmitiendo = true;
 
   Serial.println("✅ Transmisión iniciada: " + String(totalRedesActivas) + " redes WiFi");
@@ -293,9 +331,10 @@ void handleStopTransmission() {
   server.send(200, "text/plain", "OK - Detenido");
 }
 
-// Endpoint para Lock Screen App
+// Endpoint para Lock Screen App (deprecated, usa /startTransmission)
 void handleCard() {
-  Serial.println("=== /card LLAMADO (Lock Screen App) ===");
+  Serial.println("=== /card LLAMADO (Lock Screen App - deprecated) ===");
+  Serial.println("⚠️ Usar /startTransmission en su lugar");
 
   if (!server.hasArg("plain")) {
     server.send(400, "text/plain", "No body");
@@ -318,7 +357,7 @@ void handleCard() {
     String cardName = doc["card"].as<String>();
     Serial.println("Carta desde Lock Screen: " + cardName);
 
-    // Generar redes WiFi con el nombre de la carta
+    // Generar 30 redes WiFi con el nombre de la carta
     generarVariacionesCarta(cardName);
     transmitiendo = true;
 

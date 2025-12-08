@@ -566,8 +566,8 @@ suspend fun processPin(
         // Si es el primer PIN de la secuencia (no hay cartas pendientes)
         if (pendingCards.isEmpty()) {
             if (firstDigit == 0) {
-                // PIN que empieza con 0: enviar inmediatamente y cerrar
-                val success = sendCardToESP32(cardName, 1)
+                // PIN que empieza con 0: enviar 1 carta 30 veces (muchas redes)
+                val success = sendMultipleCards(listOf(cardName), 1)
                 if (success) {
                     onConnectionStatus(ConnectionStatus.SENT)
                 }
@@ -583,11 +583,12 @@ suspend fun processPin(
             val newCards = pendingCards + CardData(cardName, 1)
 
             if (newCards.size >= expectedCount) {
-                // Se completó el número esperado: enviar todas y cerrar
-                for (card in newCards) {
-                    sendCardToESP32(card.name, card.count)
+                // Se completó el número esperado: enviar todas (1 red por carta)
+                val cardNames = newCards.map { it.name }
+                val success = sendMultipleCards(cardNames, newCards.size)
+                if (success) {
+                    onConnectionStatus(ConnectionStatus.SENT)
                 }
-                onConnectionStatus(ConnectionStatus.SENT)
                 delay(200) // Para que se vea el verde
                 onCardsUpdated(emptyList(), 0) // Limpiar
                 return@withContext "close_complete"
@@ -605,26 +606,26 @@ suspend fun processPin(
 }
 
 fun getCardName(suit: Int, value: Int): String {
-    val suitName = when (suit) {
-        1 -> "Hearts"
-        2 -> "Spades"
-        3 -> "Clubs"
-        4 -> "Diamonds"
-        else -> "Unknown"
+    val suitSymbol = when (suit) {
+        1 -> "♥"  // Hearts
+        2 -> "♠"  // Spades
+        3 -> "♣"  // Clubs
+        4 -> "♦"  // Diamonds
+        else -> "?"
     }
 
     val valueName = when (value) {
-        1 -> "Ace"
-        11 -> "Jack"
-        12 -> "Queen"
-        13 -> "King"
+        1 -> "A"
+        11 -> "J"
+        12 -> "Q"
+        13 -> "K"
         else -> value.toString()
     }
 
-    return "$valueName of $suitName"
+    return "$valueName $suitSymbol"
 }
 
-suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContext(Dispatchers.IO) {
+suspend fun sendMultipleCards(cardNames: List<String>, count: Int): Boolean = withContext(Dispatchers.IO) {
     try {
         val client = OkHttpClient.Builder()
             .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -633,36 +634,27 @@ suspend fun sendCardToESP32(cardName: String, repeat: Int): Boolean = withContex
             .build()
         val esp32Ip = "192.168.4.1"
 
-        for (i in 1..repeat) {
-            val json = """{"card":"$cardName"}"""
-            val requestBody = json.toRequestBody("application/json".toMediaType())
+        // Unir todas las cartas con | como separador
+        val cardsParam = cardNames.joinToString("|")
 
-            val request = Request.Builder()
-                .url("http://$esp32Ip/card")
-                .post(requestBody)
-                .build()
+        android.util.Log.d("ESP32", "Enviando cartas: $cardsParam, count: $count")
 
-            try {
-                client.newCall(request).execute().use { response ->
-                    android.util.Log.d("ESP32", "Response code: ${response.code}")
-                    if (!response.isSuccessful) {
-                        android.util.Log.e("ESP32", "Failed to send card: ${response.message}")
-                        return@withContext false
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("ESP32", "Error sending card: ${e.message}", e)
+        val request = Request.Builder()
+            .url("http://$esp32Ip/startTransmission?cards=${java.net.URLEncoder.encode(cardsParam, "UTF-8")}&count=$count")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            android.util.Log.d("ESP32", "Response code: ${response.code}")
+            if (!response.isSuccessful) {
+                android.util.Log.e("ESP32", "Failed to send cards: ${response.message}")
                 return@withContext false
             }
-
-            if (i < repeat) {
-                delay(100)
-            }
         }
+
         return@withContext true
-    } catch (e: IOException) {
-        android.util.Log.e("ESP32", "IOException: ${e.message}", e)
-        e.printStackTrace()
+    } catch (e: Exception) {
+        android.util.Log.e("ESP32", "Error sending cards: ${e.message}", e)
         return@withContext false
     }
 }
