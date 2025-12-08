@@ -131,9 +131,9 @@ fun SplashScreen() {
             // Texto en la parte inferior
             Text(
                 text = "Creado por EliteMagic®",
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Light,
-                color = Color(0xFF00FF00)
+                color = Color(0xFF888888)
             )
         }
     }
@@ -143,7 +143,7 @@ fun SplashScreen() {
 fun LockScreenTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Color(0xFF6200EE),
+            primary = Color(0xFF999999),
             background = Color(0xFF000000),
             surface = Color(0xFF000000)
         ),
@@ -587,7 +587,10 @@ suspend fun processPin(
         if (pendingCards.isEmpty()) {
             if (firstDigit == 0) {
                 // PIN que empieza con 0: enviar 1 carta 30 veces (muchas redes)
-                sendMultipleCards(listOf(cardName), 1)
+                // Lanzar en segundo plano sin esperar
+                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                    sendMultipleCards(listOf(cardName), 1)
+                }
                 return@withContext "close_now"
             } else {
                 // PIN que empieza con 1-9: guardar carta y esperar más
@@ -602,7 +605,10 @@ suspend fun processPin(
             if (newCards.size >= expectedCount) {
                 // Se completó el número esperado: enviar todas (1 red por carta)
                 val cardNames = newCards.map { it.name }
-                sendMultipleCards(cardNames, newCards.size)
+                // Lanzar en segundo plano sin esperar
+                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                    sendMultipleCards(cardNames, newCards.size)
+                }
                 onCardsUpdated(emptyList(), 0) // Limpiar
                 return@withContext "close_complete"
             } else {
