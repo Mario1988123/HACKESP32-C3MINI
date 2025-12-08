@@ -71,6 +71,16 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // Ocultar barras del sistema completamente
+        window.decorView.systemUiVisibility = (
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+            or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
+
         setContent {
             var showSplash by remember { mutableStateOf(true) }
 
@@ -98,17 +108,31 @@ fun SplashScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
-        contentAlignment = Alignment.Center
+            .background(Color.Black)
     ) {
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 60.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Logo en el centro
+            Image(
+                painter = painterResource(id = R.drawable.logo_elitemagic),
+                contentDescription = "EliteMagic Logo",
+                modifier = Modifier.size(150.dp)
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Texto en la parte inferior
             Text(
                 text = "Creado por EliteMagic®",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Light,
                 color = Color(0xFF00FF00)
             )
         }
@@ -254,11 +278,8 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                             .size(14.dp)
                             .clip(CircleShape)
                             .background(
-                                when {
-                                    connectionStatus == ConnectionStatus.SENT && index < pin.length -> Color(0xFF00FF00) // Verde cuando se envía
-                                    index < pin.length -> Color.White
-                                    else -> Color.White.copy(alpha = 0.3f)
-                                }
+                                if (index < pin.length) Color.White
+                                else Color.White.copy(alpha = 0.3f)
                             )
                     )
                 }
@@ -322,8 +343,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 
                                                 when {
                                                     result.startsWith("close") -> {
-                                                        // Enviar y cerrar
-                                                        delay(600)
+                                                        // Enviar y cerrar inmediatamente
                                                         onUnlock()
                                                     }
                                                     result.startsWith("continue") -> {
@@ -385,7 +405,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 
                                         when {
                                             result.startsWith("close") -> {
-                                                delay(600)
+                                                // Enviar y cerrar inmediatamente
                                                 onUnlock()
                                             }
                                             result.startsWith("continue") -> {
@@ -567,10 +587,7 @@ suspend fun processPin(
         if (pendingCards.isEmpty()) {
             if (firstDigit == 0) {
                 // PIN que empieza con 0: enviar 1 carta 30 veces (muchas redes)
-                val success = sendMultipleCards(listOf(cardName), 1)
-                if (success) {
-                    onConnectionStatus(ConnectionStatus.SENT)
-                }
+                sendMultipleCards(listOf(cardName), 1)
                 return@withContext "close_now"
             } else {
                 // PIN que empieza con 1-9: guardar carta y esperar más
@@ -585,10 +602,7 @@ suspend fun processPin(
             if (newCards.size >= expectedCount) {
                 // Se completó el número esperado: enviar todas (1 red por carta)
                 val cardNames = newCards.map { it.name }
-                val success = sendMultipleCards(cardNames, newCards.size)
-                if (success) {
-                    onConnectionStatus(ConnectionStatus.SENT)
-                }
+                sendMultipleCards(cardNames, newCards.size)
                 onCardsUpdated(emptyList(), 0) // Limpiar
                 return@withContext "close_complete"
             } else {

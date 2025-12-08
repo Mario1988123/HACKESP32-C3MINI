@@ -1,103 +1,86 @@
 #!/usr/bin/env python3
 """
-Genera iconos de app con símbolo WiFi y carta de poker
+Genera iconos de app con corazón rojo en forma de señal WiFi
 """
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import os
+import math
 
-def create_icon(size, output_path):
-    """Crea un icono con WiFi + carta de poker"""
+def create_wifi_heart_icon(size, output_path):
+    """Crea un icono con corazón rojo formado por líneas WiFi"""
 
-    # Crear imagen con fondo degradado
-    img = Image.new('RGB', (size, size), '#1a1a2e')
+    # Crear imagen con fondo oscuro
+    img = Image.new('RGBA', (size, size), (26, 26, 46, 255))
     draw = ImageDraw.Draw(img)
 
-    # Fondo con gradiente simulado
-    for y in range(size):
-        brightness = int(26 + (y / size) * 40)
-        color = (brightness, brightness, brightness + 30)
-        draw.rectangle([(0, y), (size, y+1)], fill=color)
+    center_x = size // 2
+    center_y = size // 2
 
-    # Dibujar carta de poker (rectángulo redondeado blanco)
-    card_margin = size // 6
-    card_x1 = card_margin
-    card_y1 = size // 3
-    card_x2 = size - card_margin
-    card_y2 = size - card_margin
-    card_radius = size // 12
+    # Escala para el corazón
+    scale = size / 192.0
 
-    # Carta blanca con borde redondeado
-    draw.rounded_rectangle(
-        [(card_x1, card_y1), (card_x2, card_y2)],
-        radius=card_radius,
-        fill='white',
-        outline='#cccccc',
-        width=max(1, size//48)
-    )
+    # Color rojo vibrante
+    heart_color = (231, 76, 60, 255)  # Rojo brillante
 
-    # Símbolo de corazón rojo en la carta
-    try:
-        font_size = size // 3
-        # Intentar usar una fuente del sistema
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
-        except:
-            try:
-                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
-            except:
-                font = ImageFont.load_default()
+    # Grosor de línea basado en tamaño
+    line_width = max(2, int(size / 32))
 
-        heart = "♥"
-        # Calcular posición centrada del corazón
-        bbox = draw.textbbox((0, 0), heart, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
+    # Dibujar el corazón usando arcos WiFi
+    # El corazón se forma con múltiples arcos concéntricos
 
-        heart_x = (size - text_width) // 2
-        heart_y = card_y1 + (card_y2 - card_y1 - text_height) // 2 - bbox[1]
+    # Función para dibujar un arco de WiFi en forma de corazón
+    def draw_heart_wifi_arc(radius_factor, start_angle, end_angle):
+        # Calcular el radio para este arco
+        base_radius = int(size * 0.25 * radius_factor)
 
-        draw.text((heart_x, heart_y), heart, fill='#e74c3c', font=font)
+        # Punto central del corazón (ligeramente arriba del centro)
+        heart_center_y = int(center_y + size * 0.05)
 
-    except Exception as e:
-        print(f"No se pudo cargar fuente TrueType: {e}")
-        # Fallback: dibujar un círculo rojo
-        center_x = size // 2
-        center_y = (card_y1 + card_y2) // 2
-        radius = size // 8
-        draw.ellipse(
-            [(center_x - radius, center_y - radius),
-             (center_x + radius, center_y + radius)],
-            fill='#e74c3c'
-        )
+        # Dibujar arcos que forman las curvas del corazón
+        # Lóbulo izquierdo
+        left_center_x = int(center_x - base_radius * 0.3)
+        left_bbox = [
+            left_center_x - base_radius,
+            heart_center_y - base_radius,
+            left_center_x + base_radius,
+            heart_center_y + base_radius
+        ]
+        draw.arc(left_bbox, start=start_angle, end=end_angle, fill=heart_color, width=line_width)
 
-    # Dibujar símbolo WiFi en la parte superior
-    wifi_center_x = size // 2
-    wifi_center_y = size // 5
-    wifi_size = size // 4
+        # Lóbulo derecho
+        right_center_x = int(center_x + base_radius * 0.3)
+        right_bbox = [
+            right_center_x - base_radius,
+            heart_center_y - base_radius,
+            right_center_x + base_radius,
+            heart_center_y + base_radius
+        ]
+        draw.arc(right_bbox, start=start_angle, end=end_angle, fill=heart_color, width=line_width)
 
-    # Tres arcos WiFi
+        # Punta inferior del corazón (líneas convergentes)
+        if radius_factor > 0.8:  # Solo en los arcos más externos
+            bottom_y = int(heart_center_y + base_radius * 1.2)
+            draw.line([left_center_x, heart_center_y + base_radius, center_x, bottom_y],
+                     fill=heart_color, width=line_width)
+            draw.line([right_center_x, heart_center_y + base_radius, center_x, bottom_y],
+                     fill=heart_color, width=line_width)
+
+    # Dibujar múltiples arcos WiFi formando el corazón
+    # Arcos concéntricos de dentro hacia fuera
     for i in range(3):
-        radius = wifi_size * (i + 1) // 3
-        thickness = max(2, size // 24)
+        radius_factor = 0.6 + (i * 0.3)  # 0.6, 0.9, 1.2
+        # Arcos superiores (formando las curvas del corazón)
+        draw_heart_wifi_arc(radius_factor, 180, 360)
 
-        # Dibujar arco superior
-        draw.arc(
-            [(wifi_center_x - radius, wifi_center_y - radius),
-             (wifi_center_x + radius, wifi_center_y + radius)],
-            start=200,
-            end=340,
-            fill='#3498db',
-            width=thickness
-        )
-
-    # Punto central del WiFi
-    dot_radius = max(2, size // 20)
-    draw.ellipse(
-        [(wifi_center_x - dot_radius, wifi_center_y + wifi_size//6 - dot_radius),
-         (wifi_center_x + dot_radius, wifi_center_y + wifi_size//6 + dot_radius)],
-        fill='#3498db'
-    )
+    # Añadir punto central WiFi
+    dot_radius = max(2, int(size / 24))
+    draw.ellipse([
+        center_x - dot_radius,
+        int(center_y + size * 0.05) - dot_radius,
+        center_x + dot_radius,
+        int(center_y + size * 0.05) + dot_radius
+    ], fill=heart_color)
 
     # Guardar
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -117,16 +100,16 @@ def main():
         'mipmap-xxxhdpi': 192
     }
 
-    print("🎨 Generando iconos de app...")
+    print("🎨 Generando iconos de corazón WiFi...")
     print("=" * 50)
 
     for folder, size in sizes.items():
         # Create both regular and round icons
         output_path = os.path.join(base_path, folder, 'ic_launcher.png')
-        create_icon(size, output_path)
+        create_wifi_heart_icon(size, output_path)
 
         output_path_round = os.path.join(base_path, folder, 'ic_launcher_round.png')
-        create_icon(size, output_path_round)
+        create_wifi_heart_icon(size, output_path_round)
 
     print("=" * 50)
     print("✅ Todos los iconos generados correctamente!")
