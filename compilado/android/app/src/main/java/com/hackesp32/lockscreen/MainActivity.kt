@@ -105,17 +105,10 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_dialog_alert),
-                contentDescription = null,
-                modifier = Modifier.size(120.dp),
-                tint = Color(0xFF00FF00)
-            )
-            Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Creado por EliteMagic®",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Light,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
                 color = Color(0xFF00FF00)
             )
         }
@@ -330,7 +323,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
                                                 when {
                                                     result.startsWith("close") -> {
                                                         // Enviar y cerrar
-                                                        delay(300)
+                                                        delay(600)
                                                         onUnlock()
                                                     }
                                                     result.startsWith("continue") -> {
@@ -392,7 +385,7 @@ fun LockScreenContent(onUnlock: () -> Unit) {
 
                                         when {
                                             result.startsWith("close") -> {
-                                                delay(300)
+                                                delay(600)
                                                 onUnlock()
                                             }
                                             result.startsWith("continue") -> {
@@ -596,7 +589,6 @@ suspend fun processPin(
                 if (success) {
                     onConnectionStatus(ConnectionStatus.SENT)
                 }
-                delay(200) // Para que se vea el verde
                 onCardsUpdated(emptyList(), 0) // Limpiar
                 return@withContext "close_complete"
             } else {

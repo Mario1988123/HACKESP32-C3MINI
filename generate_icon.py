@@ -121,14 +121,19 @@ def main():
     print("=" * 50)
 
     for folder, size in sizes.items():
+        # Create both regular and round icons
         output_path = os.path.join(base_path, folder, 'ic_launcher.png')
         create_icon(size, output_path)
+
+        output_path_round = os.path.join(base_path, folder, 'ic_launcher_round.png')
+        create_icon(size, output_path_round)
 
     print("=" * 50)
     print("✅ Todos los iconos generados correctamente!")
     print("\nIconos creados en:")
     for folder in sizes.keys():
         print(f"  - {folder}/ic_launcher.png")
+        print(f"  - {folder}/ic_launcher_round.png")
 
 if __name__ == '__main__':
     main()
